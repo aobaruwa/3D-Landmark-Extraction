@@ -3,8 +3,6 @@ from landmark import cnn_classifier
 from tqdm import tqdm
 import numpy as np
 import os
-import pickle
-import tensorflow as tf
 
 def main(obj_file, xml_fname, model_dir):
     landmarks = {}

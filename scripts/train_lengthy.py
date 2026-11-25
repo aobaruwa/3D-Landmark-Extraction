@@ -1,20 +1,15 @@
 from glob import glob
 from landmark import cnn_classifier
-from tqdm import trange
 from tqdm import tqdm
 import numpy as np
-import operator
 import os
 import pickle
-import random
 import sys
 import tensorflow as tf
 
 land_mark='10th Rib Midspine'
 
 def load_data(val_split=0.2, batch_size=32, shuffle=True):
-    all_data={}
-
     xs=[]
     ys=[]
 
@@ -44,8 +39,6 @@ def load_data(val_split=0.2, batch_size=32, shuffle=True):
 def train(epochs, batch_size, fptrs):
     train_data = load_data(batch_size=batch_size)
     tot_train_loss, tot_val_loss = 0,0
-    #feat_size = train_data.take(1)
-    #print(f"Feature size- {feat_size}\n")
     model = cnn_classifier.build_model(228156,-999)
     opt = tf.keras.optimizers.Adam()
     loss_fn = tf.keras.losses.MeanSquaredError()

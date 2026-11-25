@@ -1,15 +1,6 @@
 import numpy as np
-import pickle
-import re
-import sys
 from itertools import tee
 import pygeodesic.geodesic as geodesic 
-from pandas import read_pickle
-from .scanner import Scan
-from .utils import align_point_cloud
-from .utils import read_plyfile
-from .utils import read_obj
-from .utils import read_obj_mesh
 from typing import List
 from sklearn.cluster import DBSCAN
 from scipy.spatial import ConvexHull
@@ -42,8 +33,6 @@ class Tape():
         path=[np.array(self.body_scan.landmarks[locations[0]])]
 
         for (src, dest) in self.pairwise(locations):
-            print('linear:',src,dest)
-
             src_coord = np.array(self.body_scan.landmarks[src])
             dest_coord = np.array(self.body_scan.landmarks[dest])
             if 'ground' in [src, dest]:
@@ -67,7 +56,6 @@ class Tape():
         path=[]
         distance=0
         for (src, dest) in self.pairwise(locations):
-            print('geo',src,dest)
             src_coord = np.array(self.body_scan.landmarks[src])
             dest_coord = np.array(self.body_scan.landmarks[dest])
             src_index=np.argmin([np.linalg.norm(src_coord-p) for p in self.body_scan.vertices])

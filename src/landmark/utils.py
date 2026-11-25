@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 from plyfile import PlyData, PlyElement
 import numpy as np
 import xml.etree.ElementTree as ET
-import pdb
 from scipy.spatial.transform import Rotation as R
 
 def read_plyfile(fname):
@@ -18,22 +17,15 @@ def read_lnd(fname):
     start=False
     landmark_dict={}
     for l in lnd_data:
-#        print(l,start,len(lnd_data))
-
         if l.startswith("AUX ="):
             start=True
             continue
         if l.startswith("END ="):
-
-#            print("Break")
             break
         if start:            
             data=l.split()
-            measurment_number=data[0]
-            # No documentation on what thes 3 numbers are but d1 and d2 are -999 if point is missing
-            d1=data[1]
+            # No documentation on what these 3 numbers are, but d2 is -999 if the point is missing
             d2=data[2]
-            d3=data[3]
             x=float(data[4])/1000.
             y=float(data[5])/1000.
             z=float(data[6])/1000.
@@ -142,7 +134,6 @@ def plot(data,colors=[]):
     
     if colors==[]:
         for d in data:
-#           x,y,z=zip(*rotate(d))
             x,y,z=zip(*d)
             ax1.scatter(x,y,z,marker='o',s=.6)
             ax2.scatter(x,y,marker='o',s=.6)
@@ -151,7 +142,6 @@ def plot(data,colors=[]):
     else:
         start=True
         for d,cs in zip(data,colors):
-#            x,y,z=zip(*rotate(d))
             x,y,z=zip(*d)
             if start:
                 alpha=1
@@ -190,7 +180,6 @@ def plot_landmark(data,landmarks):
      
        
     for d in data:
-        #x,y,z=zip(*rotate(d))
         x,y,z=zip(*d)
         ax1.scatter(x,y,z,marker='o',s=.6)
         ax2.scatter(x,y,marker='o',s=.6)
@@ -236,12 +225,3 @@ def write_landmark_xml(out_file,landmarks):
         lm.set('z',str(z))
     tree=ET.ElementTree(root)
     tree.write(out_file)
-
-    
-if __name__=="__main__":
-    data=read_plyfile('/home/jsearcy/University Of Oregon/CAESAR Data AE2000/North America/PLY and LND NA/csr0079b.ply')
-    data2=read_obj('/home/jsearcy/UO Data Science Dropbox/Private Datasets/Design/Susan/Size 16 by Chest/Height Group 0/002-20170420-006 0/Standard.obj')
-    sample=sample_pc(data,size=1000)
-    plot(sample)
-    sample2=sample_pc(data2,size=1000)
-    plot(sample2)

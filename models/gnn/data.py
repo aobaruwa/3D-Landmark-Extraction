@@ -10,15 +10,12 @@ import numpy as np
 import torch
 import trimesh as tm
 import networkx as nx
-import torch.nn.functional as F
-print("done importing !")
 data_dir = "/projects/datascience/shared/CAESAR Data AE2000/North America/PLY and LND NA"
 save_dir = "/projects/datascience/shared/DATA/graph_data"
 
 class PCDataset(DGLDataset):
     def __init__(self, data_dir=data_dir, save_dir=save_dir, save_graph=True, verbose=False):
         self.data_dir = data_dir
-        save_graph=save_graph
         super(PCDataset, self).__init__(name="PCDataset",
                                         save_dir=save_dir,
                                         verbose=verbose)
@@ -44,7 +41,6 @@ class PCDataset(DGLDataset):
         pool.join()
         self.graphs = list(L)
         self.labels = torch.tensor(self.labels, dtype=torch.float32)
-        print (self.graphs)
         return 
 
     def create_graph(self, ply_file, L):

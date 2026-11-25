@@ -1,6 +1,6 @@
 from dgl.dataloading import GraphDataLoader
 from data import PCDataset
-from model import GCN, GAT
+from model import GCN
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
 import torch

@@ -1,8 +1,3 @@
-from glob import glob
-import pickle
-import os 
-import numpy as np
-import tensorflow as tf
 from landmark import utils
 import sys
 
@@ -19,8 +14,6 @@ if fname.endswith('.ply'):
     pc=utils.read_plyfile(fname)
 
 landmarks=utils.read_landmark_xml(landmark_xml)
-
-xs=[pc]
 
 utils.plot_landmark(pc,landmarks)
 

@@ -1,6 +1,5 @@
 from models import cnn_classifier
 from data.dataset import Dataset
-from tqdm import tqdm
 import numpy as np
 import os
 import time
@@ -58,16 +57,15 @@ class Trainer():
     def train(self):
         train_data, val_data = self.prepare_batch()
         self.optimizer = self.optimizers['Adam']
-        loss_fn = tf.keras.losses.MeanSquaredError()
         if self.config['init_from_ckpt']:
             self.model, self.optimizer = self.load_checkpoint
         for epoch in range(self.config['n_epochs']):
             # train step
             for step, (x_batch, y_batch) in enumerate(train_data):
-                train_step_loss = self.train_step(x_batch, y_batch, step)
+                self.train_step(x_batch, y_batch, step)
             # eval step
             for step, (x_batch, y_batch) in enumerate(val_data):
-                val_step_loss = self.val_step(x_batch, y_batch, step)
+                self.val_step(x_batch, y_batch, step)
         return 
 
     def save_checkpoint(self,):

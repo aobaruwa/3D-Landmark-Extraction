@@ -1,7 +1,6 @@
 import optuna
 import torch
 import torch.nn as nn
-from torch.optim import Adam
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from data import PcDataset
@@ -9,37 +8,58 @@ from train import Trainer
 import sys 
 
 ACTIVATION = {'relu': nn.ReLU, 'elu':nn.ELU, 'gelu': nn.GELU}
+
+
+def _suggest_larger(trial, name, dim_range, current):
+    """Suggest the next layer width larger than `current` from `dim_range`
+    (ascending order), falling back to the range's largest value if
+    `current` already meets or exceeds it."""
+    candidates = [d for d in dim_range if d > current]
+    if not candidates:
+        candidates = [dim_range[-1]]
+    return trial.suggest_categorical(name, candidates)
+
+
+def _suggest_smaller(trial, name, dim_range, current):
+    """Suggest the next layer width smaller than `current` from `dim_range`
+    (descending order), falling back to the range's smallest value if
+    `current` already falls below it."""
+    candidates = [d for d in dim_range if d < current]
+    if not candidates:
+        candidates = [dim_range[-1]]
+    return trial.suggest_categorical(name, candidates)
+
+
 class Tnet(nn.Module):
-    def __init__(self, trial, activation_fn, in_dim, k):
+    def __init__(self, trial, activation_fn, in_dim, k, prefix):
         super().__init__()
         self.trial = trial
         self.in_dim = in_dim
         self.k = k
         self.activation_fn = activation_fn
-        n_layers = self.trial.suggest_int("n_layers", 3, 8, step=1)
-        activation_fn = self.trial.suggest_categorical("relu", "elu", "gelu")
+        n_layers = self.trial.suggest_int(f"{prefix}_n_layers", 3, 8, step=1)
         cnn_dim_range = [3, 16, 32, 64, 128, 256, 512, 1024, 2048]
         fc_dim_range = [2048, 1024, 512, 256]
         self.layers = []
 
         in_features = self.in_dim
-        ## Conv layers
+        ## Conv layers: grow channel width
         for i in range(n_layers):
-            ## pick a higher dim from the list
-            pos = cnn_dim_range.index(in_features)
-            out_features = self.trial.suggest_categorical(f"out_channels{i}", cnn_dim_range[pos+1:]) 
+            out_features = _suggest_larger(self.trial, f"{prefix}_out_channels{i}", cnn_dim_range, in_features)
             self.layers.append(nn.Conv1d(in_features, out_features, 1))
             self.layers.append(nn.BatchNorm1d(out_features))
-            self.layers.append(self.activation_fn)
+            self.layers.append(self.activation_fn())
             in_features = out_features
-        ## FC layers
+        # Pool over the point dimension and flatten before the FC stack,
+        # since Conv1d operates per-point while Linear expects a flat feature vector
+        self.layers.append(nn.AdaptiveMaxPool1d(1))
+        self.layers.append(nn.Flatten(1))
+        ## FC layers: shrink back down toward the output size
         for j in range(n_layers):
-            ## pick a higher dimension from the list
-            pos = fc_dim_range.index(in_features)
-            out_features = self.trial.suggest_categorical(f"out_features{j}", fc_dim_range[pos+1:])  
+            out_features = _suggest_smaller(self.trial, f"{prefix}_out_features{j}", fc_dim_range, in_features)
             self.layers.append(nn.Linear(in_features, out_features))
             self.layers.append(nn.BatchNorm1d(out_features))
-            self.layers.append(self.activation_fn)
+            self.layers.append(self.activation_fn())
             in_features = out_features
         
         self.layers.append(nn.Linear(in_features, self.k*self.k))
@@ -59,39 +79,46 @@ class Transform(nn.Module):
         super().__init__()
         self.trial = trial
         self.activation_fn = activation_fn
-        self.k1 = self.trial.suggest_int("input_dim", low=2, high=128, log=True)
+        # k1 must match the raw (x, y, z) point coordinates, so it isn't tunable
+        self.k1 = 3
         self.k2 = self.trial.suggest_int("feat_dim", low=64, high=1024, log=True)
-        self.input_transform = Tnet(self.trial, self.activation_fn, in_dim=3, k=self.k1)
-        self.feature_transform = Tnet(self.trial, self.activation_fn, in_dim=self.k2, k=self.k2)
+        self.input_transform = Tnet(self.trial, self.activation_fn, in_dim=self.k1, k=self.k1, prefix="input_transform")
+        self.feature_transform = Tnet(self.trial, self.activation_fn, in_dim=self.k2, k=self.k2, prefix="feature_transform")
  
         self.mlp_layers1 = []
         self.mlp_layers2 = []
-        n_layers = self.trial.suggest_int("n_layers", 2, 8, step=1)
+        n_layers = self.trial.suggest_int("transform_n_layers", 2, 8, step=1)
         cnn_dim_range = [3, 16, 32, 64, 128, 256, 512, 1024, 2048]
 
-        for i in range(n_layers):
-            pos = cnn_dim_range.index(in_features)
-            out_features = self.trial.suggest_categorical(f"out_features{j}", cnn_dim_range[pos+1:])  
-            self.mlp_layers1.append(nn.conv1d(in_features, out_features,1))
+        in_features = self.k1
+        for i in range(n_layers - 1):
+            out_features = _suggest_larger(self.trial, f"transform_mlp1_out_features{i}", cnn_dim_range, in_features)
+            self.mlp_layers1.append(nn.Conv1d(in_features, out_features,1))
             self.mlp_layers1.append(nn.BatchNorm1d(out_features))
-            self.mlp_layers1.append(self.activation_fn)
+            self.mlp_layers1.append(self.activation_fn())
             in_features = out_features
-        
+        # Final layer lands exactly on k2 so the feature-alignment transform below is valid
+        self.mlp_layers1.append(nn.Conv1d(in_features, self.k2, 1))
+        self.mlp_layers1.append(nn.BatchNorm1d(self.k2))
+        self.mlp_layers1.append(self.activation_fn())
+
+        in_features = self.k2
         for j in range(n_layers):
-            pos = cnn_dim_range.index(in_features)
-            out_features = self.trial.suggest_categorical(f"out_features{j}", cnn_dim_range[pos+1:])  
-            self.mlp_layers2.append(nn.conv1d(in_features, out_features,1))
+            out_features = _suggest_larger(self.trial, f"transform_mlp2_out_features{j}", cnn_dim_range, in_features)
+            self.mlp_layers2.append(nn.Conv1d(in_features, out_features,1))
             self.mlp_layers2.append(nn.BatchNorm1d(out_features))
-            self.mlp_layers2.append(self.activation_fn)
+            self.mlp_layers2.append(self.activation_fn())
             in_features = out_features
-        self.mlp_layers2.append(nn.MaxPool1d(in_features))
+        self.mlp_layers2.append(nn.AdaptiveMaxPool1d(1))
         self.mlp_layers2.append(nn.Flatten(1))
 
     def forward(self, xb):
         input_transform = self.input_transform(xb)
-        feat_transform = self.feature_transform(xb)
+        # batch matrix multiplication
         xb = torch.bmm(torch.transpose(xb,1,2), input_transform).transpose(1,2)
         xb = nn.Sequential(*self.mlp_layers1)(xb)
+
+        feat_transform = self.feature_transform(xb)
         xb = torch.bmm(torch.transpose(xb,1,2), feat_transform).transpose(1,2)
         output = nn.Sequential(*self.mlp_layers2)(xb)
         return output, input_transform, feat_transform
@@ -100,7 +127,7 @@ class PointNet(nn.Module):
     def __init__(self, trial, classes=222):
         super().__init__()
         self.trial = trial
-        self.activation_fn = ACTIVATION[self.trial.suggest_categorical("relu", "elu", "gelu")]
+        self.activation_fn = ACTIVATION[self.trial.suggest_categorical("activation", ["relu", "elu", "gelu"])]
         self.transform = Transform(self.trial, self.activation_fn)
         
         self.fc1 = nn.LazyLinear(2048)
@@ -114,18 +141,23 @@ class PointNet(nn.Module):
         self.bn4 = nn.BatchNorm1d(256)
 
     def forward(self, xb):
-        xb, input_transform, feat_transform = self.transform(input)     
+        xb, input_transform, feat_transform = self.transform(xb)
         fc_layers = {'2048': self.fc1, '1024': self.fc2, '512': self.fc3, '256':self.fc4}
         bn_layers = {'2048': self.bn1, '1024': self.bn2, '512': self.bn3, '256':self.bn4}
         fc_dim_range = [2048, 1024, 512, 256]
-        n_layers = self.trial.suggest_int("n_layers", 2, 4, step=1)
+        n_layers = self.trial.suggest_int("head_n_layers", 2, 4, step=1)
         in_features = xb.shape[-1]
-        for i in n_layers:
-            pos = fc_dim_range.index(in_features)
-            out_features = self.trial.suggest_categorical(f"out_features{i}", fc_dim_range[pos+1:])
-            xb = fc_layers[str(out_features)]
-            xb = bn_layers[str(out_features)]
-            xb = self.activation_fn(xb)
+        for i in range(n_layers):
+            # Each size maps to one pre-built (Lazy) layer whose input dim locks in on
+            # first use, so stop once we've reached the smallest size instead of reusing it
+            candidates = [d for d in fc_dim_range if d < in_features]
+            if not candidates:
+                break
+            out_features = self.trial.suggest_categorical(f"head_out_features{i}", candidates)
+            xb = fc_layers[str(out_features)](xb)
+            xb = bn_layers[str(out_features)](xb)
+            xb = self.activation_fn()(xb)
+            in_features = out_features
         outputs = self.fc5(xb)
 
         return outputs, input_transform, feat_transform
@@ -149,13 +181,11 @@ def objective(trial):
   
     writer = SummaryWriter(log_dir=log_dir)
 
-    model = PointNet(trial).to(DEVICE)
-
     optimizer = torch.optim.Adam(
-        model.parameters(), trial.suggest_float("lr", 1e-5, 1e-1, log=True)
+        net.parameters(), lr=trial.suggest_float("lr", 1e-5, 1e-1, log=True)
     )
    
-    trainer = Trainer(net, n_epochs, grad_accum_steps, optimizer, writer)
+    trainer = Trainer(net, n_epochs, grad_accum_steps, optimizer, writer, DEVICE)
     val_loss = trainer.train(train_loader, val_loader)
     return val_loss
 
@@ -169,5 +199,5 @@ if __name__ == "__main__":
     log_dir = sys.argv[6]
     grad_accum_steps = int(sys.argv[7])
 
-    study = optuna.create_study(directions="minimize")
+    study = optuna.create_study(direction="minimize")
     study.optimize(objective, n_trials=30)

@@ -7,15 +7,11 @@ from glob import glob
 
 def create(all_data, landmark_names):
     names = sorted([x.strip() for x in landmark_names])
-    xs = []; ys=[]; tokens=[]; 
-    maxsize=0
+    xs = []; ys=[]; tokens=[]
     # extract train_data
     for dd in tqdm(all_data): 
         key=list(dd.keys())[0] # Only one
         size=256000
-#        if len(dd[key]['PC'])  > maxsize:
-#            maxsize=len(dd[key]['PC']) 
-#            print(maxsize)
         if len(dd[key]['PC']) < size:
             select=np.random.choice(range(len(dd[key]['PC'])),len(dd[key]['PC']),replace=False)
             xs.append(np.expand_dims(np.pad(dd[key]['PC'][select],[[0,size-len(dd[key]['PC'])],[0,0]]),0))

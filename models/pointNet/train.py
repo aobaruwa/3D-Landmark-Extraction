@@ -1,10 +1,9 @@
 from torch.optim import Adam
 from data import PcDataset
-from old_point_net import PointNet
+from model import PointNet
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import os
 import sys
@@ -14,18 +13,19 @@ class Trainer():
     """Main class that handles the logic for training a pointnet model
        defined in model.py
     """
-    def __init__(self, net, n_epochs, grad_accum_steps, optimizer, writer):
+    def __init__(self, net, n_epochs, grad_accum_steps, optimizer, writer, device):
         self.net = net
         self.n_epochs = n_epochs
         self.grad_acum_steps = grad_accum_steps
         self.optimizer = optimizer
         self.writer = writer
+        self.device = device
         self.current_epoch=0
         
     def train_step(self, train_loader):
         for step, (data, labels, label_masks) in enumerate(train_loader):
             self.optimizer.zero_grad()
-            data, labels, label_masks = data.to(device), labels.to(device), label_masks.to(device)
+            data, labels, label_masks = data.to(self.device), labels.to(self.device), label_masks.to(self.device)
             logits, inp_transform, feat_transform  = self.net(data)
             loss = self.loss_fn(logits.float(), labels.float(), inp_transform.float(), feat_transform.float(), label_masks.float())
             loss.backward()
@@ -42,7 +42,7 @@ class Trainer():
     def val_step(self, val_loader):
         step_loss = []
         for step, (data, labels, label_masks) in enumerate(val_loader):
-            data, labels, label_masks = data.to(device), labels.to(device), label_masks.to(device)
+            data, labels, label_masks = data.to(self.device), labels.to(self.device), label_masks.to(self.device)
             logits, inp_transform, feat_transform  = self.net(data)
             loss = self.loss_fn(logits.float(), labels.float(), inp_transform.float(), feat_transform.float(), label_masks.float())
             step_loss.append(loss.item())
@@ -65,7 +65,7 @@ class Trainer():
             if val_loss < best_val_loss:
                 print(f"{val_loss} < {best_val_loss} saving model ...")
                 model_path = os.path.join(os.path.abspath(""), "model.pt")
-                torch.save(net, model_path)
+                torch.save(self.net, model_path)
                 best_val_loss = val_loss
             self.current_epoch+=1
         return best_val_loss
@@ -119,7 +119,7 @@ if __name__=='__main__':
     optimizer = Adam(net.parameters(), lr=1e-4)
     writer = SummaryWriter(log_dir=log_dir)
 
-    trainer = Trainer(net, n_epochs, grad_accum_steps, optimizer, writer)
+    trainer = Trainer(net, n_epochs, grad_accum_steps, optimizer, writer, device)
     trainer.train(train_loader, val_loader)
     # save model
     model_path = os.path.join(os.path.abspath(""), "model.pt")

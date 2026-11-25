@@ -52,9 +52,8 @@ class Model():
                         raise FileNotFoundError(f"ckpt file - {name} not found")
                     else:
                         continue
-                net = cnn_classifier.PointNet(ckpt_file)
+                net = PointNet(ckpt_file)
                 models[name] = net
-            print(models)
             return models
 
         elif self.model_arch == "reformer":

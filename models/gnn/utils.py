@@ -10,11 +10,8 @@ def read_lnd(fname):
             break
         if start:            
             data=l.split()
-            measurment_number=data[0]
-            # No documentation on what thes 3 numbers are but d1 and d2 are -999 if point is missing
-            d1=data[1]
+            # No documentation on what these 3 numbers are, but d2 is -999 if the point is missing
             d2=data[2]
-            d3=data[3]
             x=float(data[4])/1000.
             y=float(data[5])/1000.
             z=float(data[6])/1000.

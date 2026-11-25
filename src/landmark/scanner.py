@@ -1,10 +1,8 @@
-from .utils import read_plyfile, read_obj,read_landmark_xml,read_lnd
-import os
+from .utils import read_plyfile,read_landmark_xml,read_lnd
 import numpy as np
 import pickle
 import re
 from scipy.spatial.transform import Rotation
-import pdb
 from sral.fitsmpl import fit_smpl
 import json
 from scipy.spatial import KDTree
@@ -18,15 +16,6 @@ except:
     use_o3d=False
 
 
-
-
-
-
-
-
-
-
-    
 class Scan():
     def __init__(self, pc_file, lnd_file=None, file_format='pk', 
                  pretrained_model=None,forward_vector=None,upward_vector=None):
@@ -104,8 +93,7 @@ class Scan():
         
         print(f"\nReading {self.file_format} file . . .\n")
         
-        #else:
-        if self.file_format == 'pk':  ### self.faces ??????????
+        if self.file_format == 'pk':
             pc_obj = pickle.load(open(self.pc_file, "rb"))
             key =list(pc_obj.keys())[0]
             self.landmarks = {}
@@ -166,8 +154,6 @@ class Scan():
         for i in [8811, 8812, 8813, 8814, 9161, 9165]:
             lookup[i]=self.bp_cat.index('neck')
 
-        k,v=zip(*lookup.items())
-        labels=np.array(v)[np.argsort(k)]
         nn=self.get_nn(self.vertices,self.smpl_fit().vertices[0].detach().cpu().numpy())
         lookup[-1]=-1
         self.lookup=lookup
